@@ -25,7 +25,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/your-org/reimburse-toolkit.git
+git clone https://github.com/glasslessw1n/reimburse-toolkit.git
 cd reimburse-toolkit
 
 # 2. 安装依赖
