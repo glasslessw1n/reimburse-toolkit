@@ -10,7 +10,6 @@
 ## 目录
 
 - [快速开始](#快速开始)
-- [效果预览](#效果预览)
 - [目录结构要求](#目录结构要求)
 - [文件命名规范](#文件命名规范)
 - [工具说明](#工具说明)
@@ -44,38 +43,6 @@ python3 compose.py --base-dir /path/to/bills
 # 6. 导出 Excel 明细
 python3 gen_excel.py --base-dir /path/to/bills
 ```
-
----
-
-## 效果预览
-
-### 整理前 vs 整理后
-
-<p align="center">
-  <img src="docs/images/01_scattered.png" alt="整理前 - 散落的文件" width="48%" />
-  <img src="docs/images/02_organized.png" alt="整理后 - 按行程分类" width="48%" />
-</p>
-
-> 左：邮件附件散落状态，文件混杂、登机牌丢失、无法区分行程
-> 右：工具整理后，按行程分目录、登机牌归位、滴滴/酒店自动配对
-
-### 生成的整合 PDF
-
-<p align="center">
-  <img src="docs/images/pdf_page_1.png" alt="PDF - 行程证明页" width="30%" />
-  <img src="docs/images/pdf_page_2.png" alt="PDF - 交通票3x2" width="30%" />
-  <img src="docs/images/pdf_page_6.png" alt="PDF - 酒店+滴滴" width="30%" />
-</p>
-
-> P1 行程证明页（去程上/回程下 1×2）→ 交通票 3×2 → 酒店水单/发票 + 滴滴行程单/发票
-
-### 导出的 Excel 明细
-
-<p align="center">
-  <img src="docs/images/excel_preview.png" alt="Excel 明细表" width="80%" />
-</p>
-
-> 按差旅区间逐项列出：铁路交通、酒店住宿、滴滴出行、餐饮、通信费，含金额汇总
 
 ---
 
