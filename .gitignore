@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.DS_Store
+*_extracted_texts/
+_报销整合输出/
+报销单整合*.pdf
+报销单据整合排列.md
+报销汇总报告.md
+报销明细*.xlsx
+报销票据清单*.xlsx
