@@ -252,7 +252,63 @@ for trip_dir in trips:
     # data["transport"], data["hotel_pairs"], data["didi_paired"], data["dining"]
 ```
 
-#### 方式三：Claude Code / Cursor Skill
+#### 方式三：Hermes Agent 集成
+
+**3a. 终端工具调用**
+
+在 Hermes 中直接通过终端执行：
+
+```
+/hermes 用 reimburse.py 扫描 /path/to/bills 的报销文件
+```
+
+Hermes 会自动调用 `python3 reimburse.py summary --base-dir /path/to/bills`。
+
+**3b. Python 模块集成**
+
+在 Hermes skill 或插件中导入本工具包：
+
+```python
+from run_agent import AIAgent
+import sys
+sys.path.insert(0, '/path/to/reimburse-toolkit')
+from organize import discover_trips, classify_and_sort
+
+agent = AIAgent(model="anthropic/claude-sonnet-4.6")
+
+# 让 Hermes 代理直接操作报销数据
+trips, _ = discover_trips("/path/to/bills")
+for trip_dir in trips:
+    data = classify_and_sort(trip_dir, "/path/to/bills")
+    agent.chat(f"分析这个行程的报销数据: {data['trip_dir']}")
+```
+
+**3c. Hermes MCP 工具注册**
+
+在 Hermes 的 `config.yaml` 中添加 MCP 工具：
+
+```yaml
+mcp_servers:
+  reimburse:
+    command: python3
+    args:
+      - /path/to/reimburse-toolkit/reimburse_mcp.py
+    description: 报销单据扫描、分类、排版工具
+```
+
+然后创建 `reimburse_mcp.py` 作为 MCP 服务入口（参考 [collect_rule.md](collect_rule.md) 的工具定义）。
+
+**3d. Hermes Skill**
+
+将工具包作为 Hermes skill 安装：
+
+```bash
+cp -r reimburse-toolkit ~/.hermes/skills/reimburse/
+```
+
+之后在 Hermes 对话中直接说"整理我的报销单据"即可触发。
+
+#### 方式四：Claude Code / Cursor Skill
 
 将工具包复制到项目的 `.claude/skills/` 目录，即可通过自然语言触发：
 
