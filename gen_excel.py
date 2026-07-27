@@ -11,12 +11,12 @@
   python3 gen_excel.py --base-dir /path/to/bills
   python3 gen_excel.py --base-dir . --output 我的报销明细.xlsx
 """
-import sys, re, subprocess
+import sys, re
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from organize import discover_trips, classify_and_sort, classify_local, parse_date_range, get_base_dir
 
-import openpyxl
+import openpyxl, fitz
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
@@ -51,49 +51,44 @@ if OUTPUT is None:
 
 
 def extract_pdf_amount(filepath):
-    """从 PDF 提取金额：优先取价税合计（小写）"""
+    """从 PDF 提取价税合计金额，使用 PyMuPDF"""
     try:
-        result = subprocess.run(
-            ['pdftotext', str(filepath), '-'],
-            capture_output=True, text=True, timeout=5
-        )
-        text = result.stdout
+        doc = fitz.open(str(filepath))
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        doc.close()
         compact = re.sub(r'\s+', '', text)
 
-        # 策略1：标准 小写¥金额 模式（适用于大多数发票）
-        m = re.search(r'[（(]小写[）)]\s*[¥￥]([\d,]+\.?\d{0,2})', compact)
-        if m:
-            val = float(m.group(1).replace(',', ''))
-            if val > 10:  # 正常金额，直接返回
-                return val
-            # val ≤ 10 说明金额被PDF排版截断，需要拼接修复
-            idx = compact.find('小写')
-            if idx > 0:
-                before = compact[max(0, idx-40):idx]
-                after = compact[idx:idx+30]
-                before_nums = re.findall(r'(\d+\.\d{1,2})', before)
-                after_match = re.search(r'[¥￥]([\d]+)', after)
-                if before_nums and after_match:
-                    suffix = before_nums[-1]
-                    prefix = after_match.group(1)
-                    try:
-                        combined = float(prefix + suffix)
-                        if 10 < combined < 100000:
-                            return combined
-                    except:
-                        pass
-
-        # 策略2：价税合计
-        m = re.search(r'价税合计.*?[¥￥]([\d,]+\.?\d{0,2})', compact)
+        # 策略1：大写金额后面紧跟的¥金额（最可靠，适用于所有中文发票）
+        m = re.search(r'[壹贰叁肆伍陆柒捌玖零拾佰仟万亿元角分整圆]+[¥￥]([\d,]+\.?\d{0,2})', compact)
         if m:
             return float(m.group(1).replace(',', ''))
 
-        # 策略3：最后一个¥金额（取最大值更安全）
+        # 策略2：价税合计(大写)(小写)AMOUNT 模式（滴滴发票）
+        m = re.search(r'价税合计[（(]大写[）)][^（(]*[（(]小写[）)]([\d,]+\.?\d{0,2})', compact)
+        if m:
+            return float(m.group(1).replace(',', ''))
+
+        # 策略3：(小写)¥金额
+        m = re.search(r'[（(]小写[）)]\s*[¥￥]([\d,]+\.?\d{0,2})', compact)
+        if m:
+            return float(m.group(1).replace(',', ''))
+
+        # 策略4：价税合计后最后一个¥金额
+        idx = compact.find('价税合计')
+        if idx >= 0:
+            tail = compact[idx:]
+            amounts = re.findall(r'[¥￥]([\d,]+\.?\d{0,2})', tail)
+            if amounts:
+                return float(amounts[-1].replace(',', ''))
+
+        # 策略5：取最大¥金额
         amounts = re.findall(r'[¥￥]([\d,]+\.?\d{0,2})', compact)
         if amounts:
             vals = [float(a.replace(',', '')) for a in amounts]
             vals.sort()
-            return vals[-1]  # 取最大金额
+            return vals[-1]
     except:
         pass
     return None
