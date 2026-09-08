@@ -316,13 +316,25 @@ for trip_dir in trip_dirs:
     trip_dining = 0
     if data["dining"]:
         for d in sorted(data["dining"], key=lambda x: parse_date_range(x["filename"])[0]):
-            # 餐饮属于本地时才列出，行程中的餐饮通常是和本地混在一起的
-            # 这里跳过，统一在本地部分处理
-            pass
+            row += 1
+            name = d["filename"]
+            date_m = re.search(r"(\d{4})", name)
+            mm_dd = date_m.group(1) if date_m else ""
+            date_str = f"{mm_dd[:2]}/{mm_dd[2:]}" if mm_dd else ""
+            amt_m = re.search(r"(\d+\.?\d*)\.pdf", name)
+            amt = float(amt_m.group(1)) if amt_m else None
+            if amt:
+                trip_dining += amt
+            w(row, 1, "餐饮")
+            w(row, 2, date_str, align=center_align)
+            w(row, 3, amt if amt else "-", align=right_align, fmt=amount_fmt if amt else None)
+            w(row, 4, "")
+            w(row, 5, name)
+        totals["餐饮"] += trip_dining
 
     # ── 行程合计 ──
     row += 1
-    trip_grand = trip_t + trip_h + (didi_total if didi_total > 0 else 0)
+    trip_grand = trip_sd + trip_t + trip_h + (didi_total if didi_total > 0 else 0) + trip_dining
     merge_and_write(row, 1, 5,
                     f"本段合计: ¥{trip_grand:,.2f}" if trip_grand > 0 else "本段合计: -",
                     font=Font(name="微软雅黑", bold=True, size=10), fill=trip_total_fill)
