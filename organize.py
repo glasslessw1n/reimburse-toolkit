@@ -172,31 +172,54 @@ def classify_and_sort(trip_dir, base_dir=None):
         city = m.group(1) if m else "未知"
         hotel_by_city[city].append((typ, f))
 
-    paired_hotels = []
+    # 按城市处理：每个城市内部水单在前发票在后，城市间按最早入住日期排序
+    city_pairs = []
     for city, items in hotel_by_city.items():
-        waters = [(f, None) for t, f in items if t == "水单"]
-        invs = [(f, None) for t, f in items if t == "发票"]
-        paired = set()
-        for wi, (w, _) in enumerate(waters):
-            wname = w["filename"]
-            (w_start, w_end) = parse_date_range(wname)
-            for ii, (inv, _) in enumerate(invs):
-                if ii in paired:
-                    continue
-                iname = inv["filename"]
-                (i_start, i_end) = parse_date_range(iname)
-                if w_start == i_start and w_end == i_end:
-                    paired_hotels.append((w, inv))
-                    paired.add(ii)
-                    break
-        for wi, (w, _) in enumerate(waters):
-            if not any(w is p[0] for p in paired_hotels):
-                paired_hotels.append((w, None))
-        for ii, (inv, _) in enumerate(invs):
-            if ii not in paired:
-                paired_hotels.append((None, inv))
+        waters = [f for t, f in items if t == "水单"]
+        invs = [f for t, f in items if t == "发票"]
+        waters.sort(key=lambda f: parse_date_range(f["filename"])[0])
+        invs.sort(key=lambda f: parse_date_range(f["filename"])[0])
 
-    paired_hotels.sort(key=lambda p: sort_key_hotel_by_checkin(p[0] or p[1]))
+        city_list = []
+        used_w = set()
+        used_i = set()
+
+        # 1. 精确日期匹配（1对1）
+        for wi, w in enumerate(waters):
+            w_start, w_end = parse_date_range(w["filename"])
+            for ii, inv in enumerate(invs):
+                if ii in used_i:
+                    continue
+                i_start, i_end = parse_date_range(inv["filename"])
+                if w_start == i_start and w_end == i_end:
+                    city_list.append((w, inv))
+                    used_w.add(wi)
+                    used_i.add(ii)
+                    break
+
+        # 2. 剩余水单和发票
+        rem_waters = [w for wi, w in enumerate(waters) if wi not in used_w]
+        rem_invs = [inv for ii, inv in enumerate(invs) if ii not in used_i]
+
+        # 3. 一张发票覆盖多张水单：水单在前，发票在后
+        if len(rem_invs) == 1 and len(rem_waters) >= 1:
+            for w in rem_waters:
+                city_list.append((w, None))
+            city_list.append((None, rem_invs[0]))
+        else:
+            for w in rem_waters:
+                city_list.append((w, None))
+            for inv in rem_invs:
+                city_list.append((None, inv))
+
+        all_files = waters + invs
+        min_date = min(parse_date_range(f["filename"])[0] for f in all_files) if all_files else (99, 99)
+        city_pairs.append((min_date, city_list))
+
+    city_pairs.sort(key=lambda x: x[0])
+    paired_hotels = []
+    for _, pairs in city_pairs:
+        paired_hotels.extend(pairs)
 
     # --- 滴滴配对 ---
     didi_paired = []
@@ -462,7 +485,13 @@ def main():
         w = counts["住宿水单"]
         i = counts["住宿发票"]
         if w > 0 or i > 0:
-            status = "✓" if w == i else f"✗ 水单{w}≠发票{i}"
+            if w == i:
+                status = "✓"
+            elif w > i:
+                # 一张发票覆盖多段住宿（水单数 > 发票数）为正常情况
+                status = f"⚠ 水单{w} > 发票{i}（1张发票覆盖多段）"
+            else:
+                status = f"✗ 水单{w} < 发票{i}（疑似缺水单）"
             print(f"  酒店: {w}水单 vs {i}发票  {status}")
 
         f_count = counts["滴滴行程"]
