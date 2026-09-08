@@ -269,6 +269,35 @@ def compose_dining_2x2(sources, output_doc):
         place_pixmap(page, pix, r)
 
 
+def compose_self_drive_sheet(filepath, output_doc):
+    """自驾车高速路行程单: 单独一页, 整页满版, 不旋转"""
+    doc = open_doc_safe(filepath)
+    if not doc:
+        return
+    page = output_doc.new_page(width=A4_W, height=A4_H)
+    pix = render_page_to_pixmap(doc, 0)
+    close_doc(doc)
+    full_rect = fitz.Rect(MARGIN, MARGIN, A4_W - MARGIN, A4_H - MARGIN)
+    place_pixmap(page, pix, full_rect)
+
+
+def compose_self_drive_2x2(sources, output_doc):
+    """自驾车加油费+通行费发票: 左旋90°, 2×2, 每页最多4张"""
+    page = None
+    for i, (label, filepath) in enumerate(sources):
+        col = i % 2
+        row = (i % 4) // 2
+        if col == 0 and row == 0:
+            page = output_doc.new_page(width=A4_W, height=A4_H)
+        doc = open_doc_safe(filepath)
+        if not doc:
+            continue
+        pix = render_page_rotated(doc, 0)
+        close_doc(doc)
+        r = cell_rect(col, row, 2, 2)
+        place_pixmap(page, pix, r)
+
+
 def compose_1x2_vertical(sources, output_doc, duplicate=False):
     """1列2行通用排版(上下)"""
     if duplicate:
@@ -312,6 +341,16 @@ def build_all():
         hotel_pairs = data["hotel_pairs"]
         didi_paired = data["didi_paired"]
         dining = data["dining"]
+        self_drive = data.get("self_drive", {})
+
+        # 自驾车出差：行程单单独一页 → 加油费+通行费 2×2 (左旋90°)
+        sd_sheet = self_drive.get("sheet")
+        sd_invoices = self_drive.get("invoices", [])
+        if sd_sheet:
+            compose_self_drive_sheet(sd_sheet["fullpath"], output)
+        if sd_invoices:
+            sd_src = [(f["filename"], f["fullpath"]) for f in sd_invoices]
+            compose_self_drive_2x2(sd_src, output)
 
         transport_sorted = sorted(transport,
             key=lambda t: re.search(r"(\d{4})", t["filename"]).group(1)

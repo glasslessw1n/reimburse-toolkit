@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 生成报销明细 Excel：按差旅区间逐项列出
+- 自驾车：行程单、加油费、通行费
 - 铁路交通：日期、金额、起始站
 - 酒店：入住-退房日期、金额、酒店城市
 - 滴滴出行：区间总额、返回城市及日期
@@ -152,7 +153,7 @@ def merge_and_write(row, col1, col2, value, **kwargs):
 # ── 主循环 ────────────────────────────────────
 trip_dirs, _ = discover_trips(BASE_DIR)
 row = 2
-totals = {"交通": 0, "酒店": 0, "滴滴": 0, "餐饮": 0, "通信": 0}
+totals = {"自驾车": 0, "交通": 0, "酒店": 0, "滴滴": 0, "餐饮": 0, "通信": 0}
 
 for trip_dir in trip_dirs:
     data = classify_and_sort(trip_dir, BASE_DIR)
@@ -163,6 +164,44 @@ for trip_dir in trip_dirs:
     merge_and_write(row, 1, 5, f"【{trip_dir}】",
                     font=Font(name="微软雅黑", bold=True, size=12), fill=cat_fill)
     row += 1
+
+    # ── 0. 自驾车出差 ──
+    sd = data.get("self_drive", {})
+    trip_sd = 0
+    if sd.get("sheet"):
+        row += 1
+        name = sd["sheet"]["filename"]
+        route_m = re.search(r"(\S+-\S+)", name)
+        route = route_m.group(1) if route_m else ""
+        w(row, 1, "自驾车行程单")
+        w(row, 2, "", align=center_align)
+        w(row, 3, "-", align=right_align)
+        w(row, 4, route)
+        w(row, 5, name)
+    for inv in sd.get("invoices", []):
+        row += 1
+        name = inv["filename"]
+        date_m = re.search(r"(\d{4})", name)
+        mm, dd = (int(date_m.group(1)[:2]), date_m.group(1)[2:]) if date_m else ("", "")
+        date_str = f"{mm:02d}/{dd}" if date_m else ""
+        amt_m = re.search(r"(\d+\.?\d*)\.pdf", name)
+        amt = float(amt_m.group(1)) if amt_m else None
+        if amt:
+            trip_sd += amt
+        cat = "加油费" if "加油费" in name else "通行费"
+        nn_m = re.search(r"通行费(\d{2})", name)
+        note = f"序号{nn_m.group(1)}" if nn_m else ""
+        w(row, 1, cat)
+        w(row, 2, date_str, align=center_align)
+        w(row, 3, amt if amt else "-", align=right_align, fmt=amount_fmt if amt else None)
+        w(row, 4, "")
+        w(row, 5, name if not note else f"{name} ({note})")
+    if trip_sd or sd.get("sheet"):
+        row += 1
+        w(row, 2, "自驾车小计", font=Font(name="微软雅黑", bold=True, size=10), fill=subtotal_fill)
+        w(row, 3, trip_sd if trip_sd else "-", font=Font(name="微软雅黑", bold=True, size=10),
+          fill=subtotal_fill, align=right_align, fmt=amount_fmt if trip_sd else None)
+        totals["自驾车"] = totals.get("自驾车", 0) + trip_sd
 
     # ── 1. 铁路交通 ──
     transport = sorted(data["transport"],
@@ -375,7 +414,10 @@ if local:
 row += 2
 grand_total = sum(totals.values())
 grand_font_w = Font(name="微软雅黑", bold=True, size=13, color="FFFFFF")
-detail = f"交通:{totals['交通']:,.0f}  酒店:{totals['酒店']:,.0f}  滴滴:{totals['滴滴']:,.0f}"
+detail = ""
+if totals['自驾车'] > 0:
+    detail += f"自驾车:{totals['自驾车']:,.0f}  "
+detail += f"交通:{totals['交通']:,.0f}  酒店:{totals['酒店']:,.0f}  滴滴:{totals['滴滴']:,.0f}"
 if totals['餐饮'] > 0:
     detail += f"  餐饮:{totals['餐饮']:,.0f}"
 if totals['通信'] > 0:
@@ -391,7 +433,7 @@ ws.auto_filter.ref = f"A1:E{row}"
 
 wb.save(str(OUTPUT))
 print(f"Excel 已生成: {OUTPUT}")
-print(f"交通: ¥{totals['交通']:,.2f}  酒店: ¥{totals['酒店']:,.2f}  滴滴: ¥{totals['滴滴']:,.2f}  餐饮: ¥{totals['餐饮']:,.2f}  通信: ¥{totals['通信']:,.2f}")
+print(f"自驾车: ¥{totals['自驾车']:,.2f}  交通: ¥{totals['交通']:,.2f}  酒店: ¥{totals['酒店']:,.2f}  滴滴: ¥{totals['滴滴']:,.2f}  餐饮: ¥{totals['餐饮']:,.2f}  通信: ¥{totals['通信']:,.2f}")
 print(f"总计: ¥{grand_total:,.2f}")
 
 # 检查缺失金额

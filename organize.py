@@ -87,6 +87,18 @@ def sort_key_hotel_by_checkin(f):
     return cin
 
 
+def _toll_nn(name):
+    """从通行费文件名提取序号 NN (01/02/03)"""
+    m = re.search(r"通行费(\d{2})", name)
+    return int(m.group(1)) if m else 0
+
+
+def _self_drive_sort_key(name):
+    """自驾车加油费/通行费排序键：按日期，同日期时加油费在前、通行费按NN"""
+    is_gas = "加油费" in name
+    return (parse_date_range(name)[0], 0 if is_gas else 1, _toll_nn(name))
+
+
 # ── 核心：文件分类排序 ──────────────────────────
 def classify_and_sort(trip_dir, base_dir=None):
     """
@@ -119,11 +131,21 @@ def classify_and_sort(trip_dir, base_dir=None):
     didi_forms = {}
     didi_invoices = {}
     dining = []
+    self_drive_sheet = None   # 自驾车高速路行程单
+    gas_invoices = []          # 加油费发票
+    toll_invoices = []         # 通行费发票
     other = []
 
     for f in files:
         name = f["filename"]
-        if "登机牌" in name or re.match(r"\d{4}\s+\S+-\S+\s+\d+", name):
+        # 自驾车出差（优先识别，避免被交通票规则误匹配）
+        if "高速路" in name and "行程单" in name:
+            self_drive_sheet = f
+        elif "加油费" in name:
+            gas_invoices.append(f)
+        elif "通行费" in name:
+            toll_invoices.append(f)
+        elif "登机牌" in name or re.match(r"\d{4}\s+\S+-\S+\s+\d+", name):
             transport.append(f)
         elif "住宿水单" in name or ("住宿" in name and name.endswith('.jpg')):
             hotel_singles.append(("水单", f))
@@ -195,12 +217,24 @@ def classify_and_sort(trip_dir, base_dir=None):
     transport.sort(key=transport_date)
     dining.sort(key=lambda f: parse_date_range(f["filename"])[0])
 
+    # --- 自驾车加油费/通行费排序并合并 ---
+    gas_invoices.sort(key=lambda f: parse_date_range(f["filename"])[0])
+    toll_invoices.sort(key=lambda f: (parse_date_range(f["filename"])[0], _toll_nn(f["filename"])))
+    self_drive_invoices = gas_invoices + toll_invoices
+    self_drive_invoices.sort(key=lambda f: _self_drive_sort_key(f["filename"]))
+
     return {
         "trip_dir": trip_dir,
         "transport": transport,
         "hotel_pairs": paired_hotels,
         "didi_paired": didi_paired,
         "dining": dining,
+        "self_drive": {
+            "sheet": self_drive_sheet,          # 高速路行程单（可能为 None）
+            "invoices": self_drive_invoices,    # 合并排序后的加油费+通行费
+            "gas_count": len(gas_invoices),
+            "toll_count": len(toll_invoices),
+        },
         "other": other
     }
 
@@ -286,6 +320,18 @@ def generate_page_plan(base_dir=None):
         all_trips.append(data)
 
         trip_pages = [f"━━━ 行程段: {trip_dir} ━━━"]
+
+        # 自驾车出差：行程单单独一页 → 加油费+通行费(2×2)
+        sd = data.get("self_drive", {})
+        if sd.get("sheet"):
+            page_num += 1
+            trip_pages.append(f"  P{page_num:3d}  [自驾车行程单] {sd['sheet']['filename']}")
+        for inv in sd.get("invoices", []):
+            page_num += 1
+            tag = "自驾车加油" if "加油费" in inv["filename"] else "自驾车通行"
+            amt_match = re.search(r"(\d+\.?\d*)\.pdf", inv["filename"])
+            amt_str = f"  ¥{amt_match.group(1)}" if amt_match else ""
+            trip_pages.append(f"  P{page_num:3d}  [{tag}]   {inv['filename']}{amt_str}")
 
         for t in data["transport"]:
             page_num += 1

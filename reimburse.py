@@ -49,7 +49,15 @@ def extract_amount(filename):
 def classify_file(filename):
     """根据文件名分类"""
     name = os.path.basename(filename)
-    if "滴滴出行行程报销单" in name:
+    if "高速路" in name and "行程单" in name:
+        return ("自驾车行程单", "")
+    elif "加油费" in name:
+        amt = extract_amount(name)
+        return ("加油费发票", f"¥{amt}" if amt else "")
+    elif "通行费" in name:
+        amt = extract_amount(name)
+        return ("通行费发票", f"¥{amt}" if amt else "")
+    elif "滴滴出行行程报销单" in name:
         letter = re.search(r"单([A-Z]?)", name)
         return ("滴滴行程单", letter.group(1) if letter and letter.group(1) else "")
     elif "滴滴电子发票" in name:
